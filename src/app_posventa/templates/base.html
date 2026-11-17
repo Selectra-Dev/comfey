@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Selectra | APP POSVENTA{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            blue: '#125DA5',     // Azul Principal Selectra
+                            electric: '#1861C3', // Azul Eléctrico Acento
+                            teal: '#4799B7',     // Azul Océano / Suave
+                            dark: '#0C3D6E',
+                            light: '#F4F8FA'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-[#F8FAFC] text-gray-800 min-h-screen flex flex-col font-sans antialiased">
+
+    <!-- Navbar Superior -->
+    <header class="bg-[#125DA5] border-b border-[#1861C3] text-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
+            <div class="flex items-center space-x-3">
+                <a href="/" class="flex items-center space-x-2.5 group">
+                    <span class="text-2xl font-black tracking-wider text-white">SELECTRA</span>
+                    <span class="text-xs bg-[#4799B7] text-white font-bold px-2 py-0.5 rounded tracking-wider uppercase shadow-xs">
+                        Posventa
+                    </span>
+                </a>
+            </div>
+
+            <!-- Usuario y Rol -->
+            <div class="flex items-center space-x-4">
+                <div class="text-right hidden sm:block">
+                    <div class="text-sm font-semibold text-white">{{ current_user.name or current_user.email }}</div>
+                    <div class="text-xs">
+                        {% if current_user.role.value == 'admin' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-white text-[#125DA5] shadow-xs">
+                                <i class="fa-solid fa-shield-halved mr-1 text-[#1861C3]"></i> Administrador
+                            </span>
+                        {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#1861C3] text-white">
+                                <i class="fa-solid fa-user-tie mr-1 text-white"></i> Agente Posventa
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Simulación local de usuario para pruebas RBAC (solo en Dev Mode) -->
+                {% if dev_mode %}
+                <div class="bg-[#0C3D6E]/90 border border-[#1861C3] rounded-lg px-2.5 py-1 text-xs text-white">
+                    <form method="GET" action="" class="flex items-center space-x-1.5">
+                        <label for="as_user_select" class="text-blue-100 text-[11px] font-medium">Simular:</label>
+                        <select id="as_user_select" onchange="window.location.search = '?as_user=' + this.value" class="bg-[#125DA5] text-white text-xs rounded px-2 py-0.5 border border-[#4799B7] focus:outline-none focus:ring-1 focus:ring-white">
+                            <option value="carlos.alfageme@selectra.com" {% if current_user.email == 'carlos.alfageme@selectra.com' %}selected{% endif %}>Carlos (Admin)</option>
+                            <option value="agente.posventa@selectra.com" {% if current_user.email == 'agente.posventa@selectra.com' %}selected{% endif %}>Agente Limitado</option>
+                        </select>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 flex max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 gap-6">
+        <!-- Sidebar de Módulos con RBAC -->
+        <aside class="w-64 flex-shrink-0 hidden md:block">
+            <nav class="bg-white rounded-2xl shadow-xs border border-gray-200/90 p-4 space-y-2 sticky top-20">
+                <a href="/" class="flex items-center px-3 py-2.5 text-sm font-semibold rounded-xl transition-colors {% if active_page == 'dashboard' %}bg-blue-50/80 text-[#125DA5] border-l-4 border-[#125DA5]{% else %}text-gray-600 hover:bg-gray-50 hover:text-[#125DA5]{% endif %}">
+                    <i class="fa-solid fa-chart-pie w-6 text-center mr-2 text-[#4799B7]"></i> Panel Principal
+                </a>
+
+                <div class="pt-3 pb-1 border-t border-gray-100 text-[11px] font-bold uppercase tracking-wider text-gray-400 px-3">
+                    Módulos Posventa
+                </div>
+
+                {% for mod_key, mod_info in modules_catalog.items() %}
+                    {% if current_user.has_module_access(mod_key) %}
+                        {% if is_ticket_view and active_page == mod_key.value %}
+                        <!-- Resaltado solicitado en la izquierda cuando se trabaja dentro de un ticket -->
+                        <a href="/modulo/{{ mod_key.value }}" 
+                           style="background-color: #F6BE1A; color: #000000; border-left: 4px solid #000000;"
+                           class="flex items-center px-3 py-2.5 text-xs font-bold rounded-xl transition-all shadow-sm hover:opacity-95"
+                           title="Módulo del ticket en curso">
+                            <i class="fa-solid fa-folder-open w-6 text-center mr-2 text-black text-sm"></i>
+                            <span class="truncate text-black font-bold">{{ mod_info.title }}</span>
+                            <span class="ml-auto text-[9px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider" 
+                                  style="background-color: #000000; color: #F6BE1A;">
+                                Ticket
+                            </span>
+                        </a>
+                        {% elif active_page == mod_key.value %}
+                        <a href="/modulo/{{ mod_key.value }}" class="flex items-center px-3 py-2 text-xs font-medium rounded-xl transition-colors bg-blue-50 text-[#125DA5] font-bold border-l-4 border-[#1861C3]">
+                            <i class="fa-solid fa-folder-open w-6 text-center mr-2 text-[#1861C3]"></i>
+                            <span class="truncate">{{ mod_info.title }}</span>
+                        </a>
+                        {% else %}
+                        <a href="/modulo/{{ mod_key.value }}" class="flex items-center px-3 py-2 text-xs font-medium rounded-xl transition-colors text-gray-700 hover:bg-gray-50 hover:text-[#1861C3]">
+                            <i class="fa-solid fa-folder-open w-6 text-center mr-2 text-[#4799B7]"></i>
+                            <span class="truncate">{{ mod_info.title }}</span>
+                        </a>
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+
+                {% if current_user.role.value == 'admin' %}
+                <div class="pt-3 pb-1 border-t border-gray-100 text-[11px] font-bold uppercase tracking-wider text-[#125DA5] px-3">
+                    Administración
+                </div>
+                <a href="/admin/dashboard" class="flex items-center px-3 py-2 text-xs font-semibold rounded-xl transition-colors {% if active_page == 'admin_dashboard' %}bg-blue-50 text-[#125DA5] border-l-4 border-[#125DA5]{% else %}text-gray-700 hover:bg-gray-50 hover:text-[#125DA5]{% endif %}">
+                    <i class="fa-solid fa-chart-line w-6 text-center mr-2 text-[#4799B7]"></i> Dashboard
+                </a>
+                <a href="/admin/informes" class="flex items-center px-3 py-2 text-xs font-semibold rounded-xl transition-colors {% if active_page == 'admin_informes' %}bg-blue-50 text-[#125DA5] border-l-4 border-[#125DA5]{% else %}text-gray-700 hover:bg-gray-50 hover:text-[#125DA5]{% endif %}">
+                    <i class="fa-solid fa-file-csv w-6 text-center mr-2 text-[#4799B7]"></i> Informes (CSV)
+                </a>
+                <a href="/admin/roles" class="flex items-center px-3 py-2 text-xs font-semibold rounded-xl transition-colors {% if active_page == 'admin_roles' %}bg-blue-50 text-[#125DA5] border-l-4 border-[#125DA5]{% else %}text-gray-700 hover:bg-gray-50 hover:text-[#125DA5]{% endif %}">
+                    <i class="fa-solid fa-users-gear w-6 text-center mr-2 text-[#4799B7]"></i> Roles y Permisos RBAC
+                </a>
+                {% endif %}
+            </nav>
+        </aside>
+
+        <!-- Contenido Central -->
+        <main class="flex-1">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 mt-auto py-4 text-center text-xs text-gray-400">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div>
+                <span class="font-bold text-[#125DA5]">SELECTRA</span> Posventa &bull; Proyecto Safari Zone
+            </div>
+            <div class="flex items-center space-x-2 text-[11px]">
+                <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Google Workspace IAP &bull; Cloud Run</span>
+            </div>
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

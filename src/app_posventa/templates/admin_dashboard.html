@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Encabezado de la página -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl shadow-xs border border-gray-200/80">
+        <div>
+            <div class="flex items-center space-x-3">
+                <span class="p-2.5 bg-blue-50 text-[#125DA5] rounded-xl">
+                    <i class="fa-solid fa-chart-line text-xl"></i>
+                </span>
+                <div>
+                    <h1 class="text-xl font-bold text-gray-900">Dashboard de Rendimiento y Estados</h1>
+                    <p class="text-xs text-gray-500 mt-0.5">Métricas de volumen, distribución de estados y resolución por módulo posventa.</p>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center space-x-3">
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-[#125DA5] border border-blue-200">
+                <i class="fa-solid fa-shield-halved mr-1.5"></i> Rol Administrador
+            </span>
+            <a href="/admin/informes?module={{ selected_module or 'todos' }}&start_date={{ start_date or '' }}&end_date={{ end_date or '' }}" 
+               class="inline-flex items-center px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl shadow-xs transition-colors">
+                <i class="fa-solid fa-file-csv mr-2 text-emerald-600"></i> Ver Informes CSV
+            </a>
+        </div>
+    </div>
+
+    <!-- Barra de Filtros con Selector de Módulo y Rango de Fechas -->
+    <div class="bg-white p-5 rounded-2xl shadow-xs border border-gray-200/80">
+        <form method="GET" action="/admin/dashboard" id="dashboard-filter-form" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div>
+                    <label for="module_select" class="block text-xs font-bold text-gray-700 mb-1">
+                        <i class="fa-solid fa-layer-group text-gray-400 mr-1"></i> Módulo a Visualizar:
+                    </label>
+                    <select id="module_select" name="module" onchange="document.getElementById('dashboard-filter-form').submit();"
+                            class="w-full text-xs rounded-xl border-gray-300 shadow-xs focus:border-[#125DA5] focus:ring-[#125DA5] py-2 px-3 bg-gray-50/50">
+                        <option value="todos" {% if selected_module == 'todos' or not selected_module %}selected{% endif %}>
+                            📊 Todos los módulos
+                        </option>
+                        {% for mod_key, mod_info in modules_catalog.items() %}
+                        <option value="{{ mod_key.value }}" {% if selected_module == mod_key.value %}selected{% endif %}>
+                            {{ mod_info.title }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label for="start_date" class="block text-xs font-bold text-gray-700 mb-1">
+                        <i class="fa-regular fa-calendar text-gray-400 mr-1"></i> Fecha Desde:
+                    </label>
+                    <input type="date" id="start_date" name="start_date" value="{{ start_date or '' }}"
+                           class="w-full text-xs rounded-xl border-gray-300 shadow-xs focus:border-[#125DA5] focus:ring-[#125DA5] py-2 px-3 bg-gray-50/50">
+                </div>
+
+                <div>
+                    <label for="end_date" class="block text-xs font-bold text-gray-700 mb-1">
+                        <i class="fa-regular fa-calendar-check text-gray-400 mr-1"></i> Fecha Hasta:
+                    </label>
+                    <input type="date" id="end_date" name="end_date" value="{{ end_date or '' }}"
+                           class="w-full text-xs rounded-xl border-gray-300 shadow-xs focus:border-[#125DA5] focus:ring-[#125DA5] py-2 px-3 bg-gray-50/50">
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button type="submit" class="flex-1 py-2 px-4 bg-[#125DA5] hover:bg-[#0C3D6E] text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center">
+                        <i class="fa-solid fa-arrows-rotate mr-1.5"></i> Actualizar Gráficas
+                    </button>
+                    <a href="/admin/dashboard" class="py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-semibold rounded-xl transition-colors" title="Restablecer">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Accesos rápidos de fechas -->
+            <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100 text-xs">
+                <span class="text-gray-400 font-medium">Accesos rápidos:</span>
+                <button type="button" onclick="setPresetDays(7)" class="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-[11px] transition-colors">
+                    Últimos 7 días
+                </button>
+                <button type="button" onclick="setPresetDays(30)" class="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-[11px] transition-colors">
+                    Últimos 30 días
+                </button>
+                <button type="button" onclick="clearDates()" class="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-[11px] transition-colors">
+                    Histórico completo
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Indicadores Clave (KPIs) -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs relative overflow-hidden">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Tickets</span>
+                <span class="p-2 bg-blue-50 text-[#125DA5] rounded-xl text-sm">
+                    <i class="fa-solid fa-ticket"></i>
+                </span>
+            </div>
+            <div class="text-3xl font-black text-gray-900 mt-2">{{ metrics.total_tickets }}</div>
+            <p class="text-[11px] text-gray-500 mt-1">
+                {% if selected_module == 'todos' or not selected_module %}Todos los módulos{% else %}{{ current_module_title }}{% endif %}
+            </p>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs relative overflow-hidden">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-[#1861C3] uppercase tracking-wider">Tickets Activos</span>
+                <span class="p-2 bg-sky-50 text-[#1861C3] rounded-xl text-sm">
+                    <i class="fa-solid fa-hourglass-half"></i>
+                </span>
+            </div>
+            <div class="text-3xl font-black text-[#1861C3] mt-2">{{ metrics.active_tickets }}</div>
+            <p class="text-[11px] text-gray-500 mt-1">Abiertos o en proceso de gestión</p>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs relative overflow-hidden">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Tasa de Resolución</span>
+                <span class="p-2 bg-emerald-50 text-emerald-600 rounded-xl text-sm">
+                    <i class="fa-solid fa-check-double"></i>
+                </span>
+            </div>
+            <div class="text-3xl font-black text-emerald-600 mt-2">{{ metrics.resolution_rate }}%</div>
+            <p class="text-[11px] text-gray-500 mt-1">{{ metrics.resolved_tickets + metrics.closed_tickets }} resueltos o cerrados</p>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-xs relative overflow-hidden">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-rose-600 uppercase tracking-wider">Urgentes Activos</span>
+                <span class="p-2 bg-rose-50 text-rose-600 rounded-xl text-sm">
+                    <i class="fa-solid fa-bell"></i>
+                </span>
+            </div>
+            <div class="text-3xl font-black text-rose-600 mt-2">{{ metrics.urgent_tickets }}</div>
+            <p class="text-[11px] text-gray-500 mt-1">Requieren atención prioritaria</p>
+        </div>
+    </div>
+
+    <!-- Gráficas Principales por Estados -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Gráfica Circular de Distribución por Estado -->
+        <div class="bg-white p-6 rounded-2xl shadow-xs border border-gray-200/80 flex flex-col">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-bold text-gray-900">Distribución de Tickets por Estado</h3>
+                    <p class="text-xs text-gray-400">Porcentaje y volumen según el flujo de vida del ticket</p>
+                </div>
+                <span class="p-2 bg-gray-50 text-gray-500 rounded-lg text-xs">
+                    <i class="fa-solid fa-chart-pie"></i>
+                </span>
+            </div>
+
+            <div class="flex-1 flex flex-col md:flex-row items-center justify-center gap-6 my-2">
+                <!-- Canvas de Chart.js -->
+                <div class="relative w-52 h-52 flex-shrink-0">
+                    <canvas id="statusDoughnutChart"></canvas>
+                </div>
+
+                <!-- Desglose numérico con barras y porcentajes -->
+                <div class="flex-1 w-full space-y-2.5">
+                    {% for st_key, st_info in metrics.status_counts.items() %}
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="font-semibold text-gray-700 flex items-center">
+                                <span class="w-2.5 h-2.5 rounded-full mr-1.5" style="background-color: {{ st_info.color }};"></span>
+                                {{ st_info.title }}
+                            </span>
+                            <span class="font-bold text-gray-900">{{ st_info.count }} <span class="text-gray-400 font-normal">({{ st_info.percentage }}%)</span></span>
+                        </div>
+                        <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                            <div class="h-2 rounded-full transition-all duration-500" 
+                                 style="width: {{ st_info.percentage }}%; background-color: {{ st_info.color }};"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráfica de Barras de Estados -->
+        <div class="bg-white p-6 rounded-2xl shadow-xs border border-gray-200/80 flex flex-col">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-bold text-gray-900">Volumen Comparativo por Estado</h3>
+                    <p class="text-xs text-gray-400">Conteo directo de casos abiertos, en gestión y finalizados</p>
+                </div>
+                <span class="p-2 bg-gray-50 text-gray-500 rounded-lg text-xs">
+                    <i class="fa-solid fa-chart-column"></i>
+                </span>
+            </div>
+
+            <div class="flex-1 relative min-h-[220px]">
+                <canvas id="statusBarChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sección Secundaria: Distribución por Prioridad y Comparativa de Módulos -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Desglose por Prioridad -->
+        <div class="bg-white p-6 rounded-2xl shadow-xs border border-gray-200/80">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-bold text-gray-900">Desglose por Prioridad</h3>
+                    <p class="text-xs text-gray-400">Nivel de criticidad asignado a los tickets</p>
+                </div>
+                <span class="p-2 bg-amber-50 text-amber-600 rounded-lg text-xs">
+                    <i class="fa-solid fa-flag"></i>
+                </span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                {% for pr_key, pr_info in metrics.priority_counts.items() %}
+                <div class="p-3 rounded-xl border border-gray-100 {{ pr_info.badge_bg }}">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-gray-600">{{ pr_info.title }}</span>
+                    <div class="text-xl font-black mt-1" style="color: {{ pr_info.color }};">{{ pr_info.count }}</div>
+                    <span class="text-[10px] text-gray-500">{{ pr_info.percentage }}% del total</span>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="relative h-40">
+                <canvas id="priorityBarChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Comparativa de Tickets por Módulo -->
+        <div class="bg-white p-6 rounded-2xl shadow-xs border border-gray-200/80">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-bold text-gray-900">Volumen de Tickets por Módulo</h3>
+                    <p class="text-xs text-gray-400">Distribución de carga operativa en el periodo</p>
+                </div>
+                <span class="p-2 bg-blue-50 text-[#125DA5] rounded-lg text-xs">
+                    <i class="fa-solid fa-folder-tree"></i>
+                </span>
+            </div>
+
+            <div class="space-y-3">
+                {% for mod_key, mod_info in metrics.module_counts.items() %}
+                <div class="flex items-center justify-between p-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                    <div class="flex items-center space-x-3 truncate">
+                        <span class="p-2 bg-gray-100 text-gray-600 rounded-lg text-xs flex-shrink-0">
+                            <i class="fa-solid fa-{{ mod_info.icon }}"></i>
+                        </span>
+                        <div class="truncate">
+                            <a href="/admin/dashboard?module={{ mod_key }}&start_date={{ start_date or '' }}&end_date={{ end_date or '' }}"
+                               class="text-xs font-bold text-gray-800 hover:text-[#125DA5] truncate">
+                                {{ mod_info.title }}
+                            </a>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2 flex-shrink-0">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-50 text-[#125DA5]">
+                            {{ mod_info.count }} tickets
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Actividad Reciente de Tickets Filtrados -->
+    <div class="bg-white rounded-2xl shadow-xs border border-gray-200/80 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-gray-900">Últimos Tickets Registrados</h3>
+            <a href="/admin/informes?module={{ selected_module or 'todos' }}&start_date={{ start_date or '' }}&end_date={{ end_date or '' }}" 
+               class="text-xs font-bold text-[#125DA5] hover:underline">
+                Ver todos en Informes &rarr;
+            </a>
+        </div>
+        <div class="divide-y divide-gray-100">
+            {% for t in metrics.recent_tickets %}
+            <div class="p-4 hover:bg-gray-50/70 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-start space-x-3">
+                    <span class="mt-0.5 inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-gray-100 text-gray-700">
+                        {{ t.id }}
+                    </span>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <a href="/tickets/{{ t.id }}" class="text-xs font-bold text-gray-900 hover:text-[#125DA5]">
+                                {{ t.title }}
+                            </a>
+                            {% if t.contract_reference %}
+                            <span class="text-[10px] font-mono bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded">
+                                ID: {{ t.contract_reference }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <div class="text-[11px] text-gray-400 mt-0.5">
+                            Cliente: <span class="text-gray-600 font-medium">{{ t.full_customer_name }}</span> &bull; Compañía: <span class="text-gray-600 font-medium">{{ t.company or 'N/A' }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3 self-end sm:self-center">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold {{ status_meta[t.status].badge_bg }} {{ status_meta[t.status].badge_text }}">
+                        <i class="fa-solid {{ status_meta[t.status].icon }} mr-1"></i>
+                        {{ status_meta[t.status].title }}
+                    </span>
+                    <a href="/tickets/{{ t.id }}" class="px-2.5 py-1 bg-gray-100 hover:bg-[#125DA5] hover:text-white text-gray-700 text-xs font-semibold rounded-lg transition-colors">
+                        Ver
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <div class="p-8 text-center text-xs text-gray-500">
+                No hay tickets en este módulo y rango de fechas.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Carga de Chart.js para renderizado dinámico de gráficas -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Inicialización de Gráfica Donut de Estados
+    const statusLabels = [
+        {% for st_key, st_info in metrics.status_counts.items() %}
+            "{{ st_info.title }}",
+        {% endfor %}
+    ];
+    const statusData = [
+        {% for st_key, st_info in metrics.status_counts.items() %}
+            {{ st_info.count }},
+        {% endfor %}
+    ];
+    const statusColors = [
+        {% for st_key, st_info in metrics.status_counts.items() %}
+            "{{ st_info.color }}",
+        {% endfor %}
+    ];
+
+    const ctxDonut = document.getElementById('statusDoughnutChart');
+    if (ctxDonut) {
+        new Chart(ctxDonut, {
+            type: 'doughnut',
+            data: {
+                labels: statusLabels,
+                datasets: [{
+                    data: statusData,
+                    backgroundColor: statusColors,
+                    borderWidth: 2,
+                    borderColor: '#ffffff',
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const val = context.raw || 0;
+                                const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
+                                return ` ${context.label}: ${val} (${pct}%)`;
+                            }
+                        }
+                    }
+                },
+                cutout: '68%'
+            }
+        });
+    }
+
+    // Inicialización de Gráfica de Barras por Estado
+    const ctxBar = document.getElementById('statusBarChart');
+    if (ctxBar) {
+        new Chart(ctxBar, {
+            type: 'bar',
+            data: {
+                labels: statusLabels,
+                datasets: [{
+                    label: 'Tickets',
+                    data: statusData,
+                    backgroundColor: statusColors,
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1, precision: 0 }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+
+    // Inicialización de Gráfica de Prioridad
+    const priorityLabels = [
+        {% for pr_key, pr_info in metrics.priority_counts.items() %}
+            "{{ pr_info.title }}",
+        {% endfor %}
+    ];
+    const priorityData = [
+        {% for pr_key, pr_info in metrics.priority_counts.items() %}
+            {{ pr_info.count }},
+        {% endfor %}
+    ];
+    const priorityColors = [
+        {% for pr_key, pr_info in metrics.priority_counts.items() %}
+            "{{ pr_info.color }}",
+        {% endfor %}
+    ];
+
+    const ctxPriority = document.getElementById('priorityBarChart');
+    if (ctxPriority) {
+        new Chart(ctxPriority, {
+            type: 'bar',
+            data: {
+                labels: priorityLabels,
+                datasets: [{
+                    label: 'Tickets',
+                    data: priorityData,
+                    backgroundColor: priorityColors,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1, precision: 0 }
+                    },
+                    y: {
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+
+    // Funciones auxiliares para selectores rápidos de fechas
+    function setPresetDays(days) {
+        const end = new Date();
+        const start = new Date();
+        start.setDate(end.getDate() - days);
+
+        document.getElementById('start_date').value = start.toISOString().split('T')[0];
+        document.getElementById('end_date').value = end.toISOString().split('T')[0];
+        document.getElementById('dashboard-filter-form').submit();
+    }
+
+    function clearDates() {
+        document.getElementById('start_date').value = '';
+        document.getElementById('end_date').value = '';
+        document.getElementById('dashboard-filter-form').submit();
+    }
+</script>
+{% endblock %}

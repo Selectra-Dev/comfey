@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | APP POSVENTA{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Hero / Bienvenida -->
+    <div class="bg-gradient-to-r from-[#125DA5] via-[#1861C3] to-[#4799B7] rounded-2xl p-6 text-white shadow-sm flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold">Bienvenido a APP POSVENTA</h1>
+            <p class="text-sm text-blue-100 mt-1 max-w-2xl">
+                Portal operativo para la gestión de incidencias, retención, reclamaciones, derechos GDPR y altas técnicas de Selectra.
+            </p>
+        </div>
+        <div class="hidden lg:block text-right">
+            <span class="inline-flex items-center bg-white/15 backdrop-blur-xs border border-white/20 px-3 py-1.5 rounded-lg text-xs font-semibold">
+                <i class="fa-solid fa-shield-halved mr-1.5"></i> Google Workspace Protegido
+            </span>
+        </div>
+    </div>
+
+    <!-- Métricas Rápidas -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-xl border border-gray-200/90 shadow-xs hover:border-[#1861C3] transition">
+            <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Módulos Habilitados</div>
+            <div class="text-2xl font-extrabold text-[#125DA5] mt-1">{{ accessible_modules_count }} / 6</div>
+            <div class="text-xs text-gray-500 mt-1">Conforme a tus permisos asignados</div>
+        </div>
+        <div class="bg-white p-5 rounded-xl border border-gray-200/90 shadow-xs hover:border-[#1861C3] transition">
+            <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Tickets Totales</div>
+            <div class="text-2xl font-extrabold text-[#1861C3] mt-1">{{ total_tickets }}</div>
+            <div class="text-xs text-gray-500 mt-1">En tus áreas de trabajo</div>
+        </div>
+        <div class="bg-white p-5 rounded-xl border border-gray-200/90 shadow-xs hover:border-[#4799B7] transition">
+            <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Tickets Abiertos</div>
+            <div class="text-2xl font-extrabold text-[#4799B7] mt-1">{{ open_tickets }}</div>
+            <div class="text-xs text-gray-500 mt-1">Pendientes de atención o resolución</div>
+        </div>
+        <div class="bg-white p-5 rounded-xl border border-gray-200/90 shadow-xs hover:border-red-400 transition">
+            <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Prioridad Urgente</div>
+            <div class="text-2xl font-extrabold text-red-600 mt-1">{{ urgent_tickets }}</div>
+            <div class="text-xs text-gray-500 mt-1">Rechazos ATR o escalados</div>
+        </div>
+    </div>
+
+    <!-- Grilla de Módulos Operativos -->
+    <div>
+        <h2 class="text-base font-bold text-gray-900 mb-3 flex items-center">
+            <i class="fa-solid fa-cubes text-[#1861C3] mr-2"></i> Módulos de Operaciones
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {% for mod_key, mod_info in modules_catalog.items() %}
+                {% set has_access = current_user.has_module_access(mod_key) %}
+                <div class="bg-white rounded-2xl border {% if has_access %}border-gray-200/90 hover:border-[#1861C3] shadow-xs hover:shadow-md transition-all{% else %}border-gray-100 opacity-60 bg-gray-50/50{% endif %} p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <span class="p-2.5 rounded-xl {% if has_access %}bg-blue-50 text-[#125DA5]{% else %}bg-gray-100 text-gray-400{% endif %} text-base">
+                                <i class="fa-solid fa-folder-open"></i>
+                            </span>
+                            {% if has_access %}
+                                <span class="text-xs font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-200">Activo</span>
+                            {% else %}
+                                <span class="text-xs font-semibold bg-gray-100 text-gray-500 px-2.5 py-0.5 rounded-full">Sin acceso</span>
+                            {% endif %}
+                        </div>
+
+                        <h3 class="text-sm font-bold text-gray-900 mt-3.5">{{ mod_info.title }}</h3>
+                        <p class="text-xs text-gray-500 mt-1.5 leading-relaxed">{{ mod_info.description }}</p>
+                    </div>
+
+                    <div class="mt-4 pt-3.5 border-t border-gray-100 flex items-center justify-between">
+                        {% if has_access %}
+                            <a href="/modulo/{{ mod_key.value }}" class="text-xs font-bold text-[#125DA5] hover:text-[#1861C3] flex items-center group">
+                                Abrir módulo <i class="fa-solid fa-arrow-right ml-1.5 text-[11px] group-hover:translate-x-0.5 transition-transform"></i>
+                            </a>
+                        {% else %}
+                            <span class="text-xs text-gray-400 italic">Solicita acceso al Admin</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Tickets Recientes -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <h2 class="text-base font-bold text-gray-800 mb-3 flex items-center">
+            <i class="fa-solid fa-clock-rotate-left text-gray-400 mr-2"></i> Actividad Reciente en tus Módulos
+        </h2>
+
+        {% if recent_tickets %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-gray-50 border-b border-gray-200 text-gray-600 uppercase font-semibold">
+                    <tr>
+                        <th class="p-2.5">ID Ticket</th>
+                        <th class="p-2.5">Módulo</th>
+                        <th class="p-2.5">Título</th>
+                        <th class="p-2.5">Cliente</th>
+                        <th class="p-2.5">Prioridad</th>
+                        <th class="p-2.5">Estado</th>
+                        <th class="p-2.5">Fecha</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for t in recent_tickets %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="p-2.5 font-mono font-bold text-selectra-blue">{{ t.id }}</td>
+                        <td class="p-2.5 text-gray-500 font-medium">{{ t.module.value }}</td>
+                        <td class="p-2.5 text-gray-800 font-semibold">{{ t.title }}</td>
+                        <td class="p-2.5 text-gray-600">{{ t.customer_name or '-' }}</td>
+                        <td class="p-2.5">
+                            {% if t.priority.value == 'urgente' %}
+                                <span class="bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold">Urgente</span>
+                            {% elif t.priority.value == 'alta' %}
+                                <span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-bold">Alta</span>
+                            {% else %}
+                                <span class="bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{{ t.priority.value|capitalize }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="p-2.5">
+                            <span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-semibold">{{ t.status.value|capitalize }}</span>
+                        </td>
+                        <td class="p-2.5 text-gray-400">{{ t.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-6 text-gray-400 text-xs">
+            No hay tickets registrados en los módulos a los que tienes acceso.
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

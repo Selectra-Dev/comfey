@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "safari-zone-governance": {
+      "url": "https://safari-zone-governance-agent-mcp-446700512803.europe-west1.run.app/sse"
+    }
+  }
+}

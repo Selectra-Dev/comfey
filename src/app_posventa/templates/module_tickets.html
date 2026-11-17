@@ -1,0 +1,636 @@
+{% extends "base.html" %}
+
+{% block title %}{{ module_info.title }} | APP POSVENTA{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Cabecera del Módulo con Selector de Vista en la Esquina Superior Derecha -->
+    <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <div class="flex items-center space-x-3">
+                <span class="w-11 h-11 rounded-xl bg-[#F4F8FA] border border-[#4799B7]/30 text-[#125DA5] flex items-center justify-center text-xl shadow-xs">
+                    <i class="fa-solid fa-{{ module_info.icon }}"></i>
+                </span>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h1 class="text-xl font-bold text-gray-900">{{ module_info.title }}</h1>
+                        <span class="text-xs bg-slate-100 text-[#125DA5] font-bold px-2 py-0.5 rounded-full border border-gray-200">
+                            {{ all_tickets_count }} tickets
+                        </span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-0.5">{{ module_info.description }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controles Superior Derecha: Conmutador de Vista (Lista / Panel) y Botón Nuevo Ticket -->
+        <div class="flex items-center space-x-3 self-end md:self-auto">
+            <!-- Selector de Vista (Lista vs Panel) -->
+            <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs shadow-xs" role="group">
+                <button type="button" id="btn-view-table" onclick="setViewMode('table')" 
+                    class="flex items-center space-x-1.5 px-3 py-1.5 rounded-md font-semibold transition-all duration-150 bg-white text-[#125DA5] shadow-xs">
+                    <i class="fa-solid fa-table-list"></i>
+                    <span>Vista Lista</span>
+                </button>
+                <button type="button" id="btn-view-kanban" onclick="setViewMode('kanban')" 
+                    class="flex items-center space-x-1.5 px-3 py-1.5 rounded-md font-semibold transition-all duration-150 text-gray-500 hover:text-[#125DA5]">
+                    <i class="fa-solid fa-table-columns"></i>
+                    <span>Vista Panel</span>
+                </button>
+            </div>
+
+            <!-- Botón Crear Nuevo Ticket -->
+            <button onclick="document.getElementById('new-ticket-modal').classList.remove('hidden')" 
+                class="bg-[#125DA5] hover:bg-[#1861C3] text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm flex items-center transition-all duration-150">
+                <i class="fa-solid fa-plus mr-1.5"></i> Nuevo Ticket
+            </button>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VISTA 1: LISTA / TABLA                     -->
+    <!-- ========================================== -->
+    <div id="view-table-container" class="space-y-4">
+        <!-- Filtros de Estado en Vista Lista -->
+        <div class="flex items-center space-x-2 text-xs overflow-x-auto pb-1">
+            <span class="text-gray-400 font-medium mr-1"><i class="fa-solid fa-filter mr-1"></i>Filtrar:</span>
+            <a href="?status=" class="px-3 py-1.5 rounded-lg font-semibold transition-all {% if not active_status %}bg-[#125DA5] text-white shadow-xs{% else %}bg-white border border-gray-200 text-gray-600 hover:border-[#1861C3] hover:text-[#1861C3]{% endif %}">
+                Todos ({{ all_tickets_count }})
+            </a>
+            {% for st_key, st_info in statuses_catalog.items() %}
+            <a href="?status={{ st_info.key }}" class="px-3 py-1.5 rounded-lg font-semibold transition-all {% if active_status == st_info.key %}bg-[#125DA5] text-white shadow-xs{% else %}bg-white border border-gray-200 text-gray-600 hover:border-[#1861C3] hover:text-[#1861C3]{% endif %}">
+                <i class="fa-solid {{ st_info.icon }} mr-1 text-[10px]"></i>
+                {{ st_info.title }} ({{ tickets_by_status[st_key]|length }})
+            </a>
+            {% endfor %}
+        </div>
+
+        <!-- Tabla de Tickets -->
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            {% if tickets %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-gray-50/75 border-b border-gray-200 text-gray-600 uppercase font-semibold tracking-wider">
+                        <tr>
+                            <th class="p-3.5">ID Ticket</th>
+                            <th class="p-3.5">Título / Asunto</th>
+                            {% if module_key == 'incidencias_contratos' %}
+                            <th class="p-3.5">Categorización Backoffice</th>
+                            {% endif %}
+                            <th class="p-3.5">Cliente</th>
+                            <th class="p-3.5">Ref. / CUPS / Cía</th>
+                            <th class="p-3.5">Prioridad</th>
+                            <th class="p-3.5">Estado</th>
+                            <th class="p-3.5">Fecha</th>
+                            <th class="p-3.5 text-right">Mover Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for t in tickets %}
+                        <tr class="hover:bg-slate-50/80 transition-colors">
+                            <td class="p-3.5 whitespace-nowrap">
+                                <a href="/tickets/{{ t.id }}" target="_blank" rel="noopener noreferrer" 
+                                    class="font-mono font-bold text-[#125DA5] hover:text-[#1861C3] hover:underline inline-flex items-center space-x-1" title="Abrir ticket en pestaña nueva">
+                                    <span>#{{ t.id }}</span>
+                                    <i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-[#4799B7]"></i>
+                                </a>
+                            </td>
+                            <td class="p-3.5 max-w-sm">
+                                <a href="/tickets/{{ t.id }}" target="_blank" rel="noopener noreferrer" 
+                                    class="font-bold text-gray-900 hover:text-[#125DA5] hover:underline block leading-snug" title="Abrir ticket en pestaña nueva">
+                                    {{ t.title }}
+                                </a>
+                                <div class="text-gray-500 text-[11px] truncate mt-0.5">{{ t.description }}</div>
+                            </td>
+                            {% if module_key == 'incidencias_contratos' %}
+                            <td class="p-3.5 whitespace-nowrap">
+                                <div class="space-y-1">
+                                    {% if t.resolution and t.resolution in resolucion_metadata %}
+                                        {% set rm = resolucion_metadata[t.resolution] %}
+                                        <div>
+                                            <span class="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full {{ rm.badge_bg }} {{ rm.badge_text }} border {{ rm.border }}">
+                                                <i class="fa-solid {{ rm.icon }} mr-1 text-[8px]"></i> {{ t.resolution }}
+                                            </span>
+                                        </div>
+                                    {% elif t.resolution %}
+                                        <div><span class="text-[10px] font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">{{ t.resolution }}</span></div>
+                                    {% endif %}
+
+                                    {% if t.classification and t.classification in clasificacion_metadata %}
+                                        {% set cm = clasificacion_metadata[t.classification] %}
+                                        <div>
+                                            <span class="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full {{ cm.badge_bg }} {{ cm.badge_text }}">
+                                                <i class="fa-solid {{ cm.icon }} mr-1 text-[8px]"></i> {{ t.classification }}
+                                            </span>
+                                        </div>
+                                    {% endif %}
+
+                                    {% if t.recovery_channel and t.recovery_channel in medio_metadata %}
+                                        {% set mm = medio_metadata[t.recovery_channel] %}
+                                        <div>
+                                            <span class="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full {{ mm.badge_bg }} {{ mm.badge_text }}">
+                                                <i class="fa-solid {{ mm.icon }} mr-1 text-[8px]"></i> {{ t.recovery_channel }}
+                                            </span>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            {% endif %}
+                            <td class="p-3.5 whitespace-nowrap">
+                                <div class="font-semibold text-gray-800">
+                                    {{ t.customer_name or '' }}{% if t.customer_surname %} {{ t.customer_surname }}{% endif %}{% if not t.customer_name and not t.customer_surname %}No indicado{% endif %}
+                                </div>
+                                <div class="text-gray-400 text-[11px]">{{ t.customer_phone or t.customer_email or '-' }}</div>
+                            </td>
+                            <td class="p-3.5 font-mono text-gray-700 whitespace-nowrap">
+                                <div class="font-medium flex items-center space-x-1">
+                                    <span class="text-gray-400 text-[10px] font-sans">ID:</span>
+                                    <span class="font-bold text-gray-800">{{ t.contract_reference or t.cups or '-' }}</span>
+                                </div>
+                                <div class="flex items-center space-x-1.5 mt-0.5">
+                                    {% if t.company %}
+                                    <span class="text-[10px] text-[#125DA5] font-sans font-semibold uppercase">{{ t.company }}</span>
+                                    {% endif %}
+                                    {% if t.department %}
+                                    <span class="text-[9px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.2 rounded font-sans font-medium">{{ t.department }}</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="p-3.5 whitespace-nowrap">
+                                {% if t.priority.value == 'urgente' %}
+                                    <span class="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded font-bold">Urgente</span>
+                                {% elif t.priority.value == 'alta' %}
+                                    <span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded font-bold">Alta</span>
+                                {% elif t.priority.value == 'media' %}
+                                    <span class="bg-sky-50 text-[#125DA5] border border-sky-200 px-2 py-0.5 rounded font-semibold">Media</span>
+                                {% else %}
+                                    <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded">Baja</span>
+                                {% endif %}
+                            </td>
+                            <td class="p-3.5 whitespace-nowrap">
+                                {% set st = statuses_catalog[t.status] %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold {{ st.badge_bg }} {{ st.badge_text }} border border-gray-200">
+                                    <i class="fa-solid {{ st.icon }} mr-1 text-[10px]"></i>
+                                    {{ st.title }}
+                                </span>
+                            </td>
+                            <td class="p-3.5 text-gray-500 whitespace-nowrap text-[11px]">{{ t.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td class="p-3.5 text-right whitespace-nowrap">
+                                <div class="inline-flex items-center space-x-1">
+                                    <a href="/tickets/{{ t.id }}" target="_blank" rel="noopener noreferrer" 
+                                        class="text-xs px-2.5 py-1 rounded-lg border border-gray-300 hover:border-[#1861C3] text-[#125DA5] hover:text-[#1861C3] bg-white shadow-2xs font-semibold inline-flex items-center"
+                                        title="Abrir zona de trabajo del ticket en pestaña nueva">
+                                        <i class="fa-solid fa-up-right-from-square mr-1 text-[10px]"></i> Abrir
+                                    </a>
+                                    <form method="POST" action="/modulo/{{ module_key }}/tickets/{{ t.id }}/status" class="inline-block">
+                                        <select name="new_status" onchange="this.form.submit()" class="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white hover:border-[#1861C3] focus:ring-1 focus:ring-[#1861C3] outline-none text-gray-700 cursor-pointer">
+                                            <option value="" disabled selected>Mover...</option>
+                                            {% for st_key, st_info in statuses_catalog.items() %}
+                                                {% if st_key != t.status %}
+                                                <option value="{{ st_info.key }}">A {{ st_info.title }}</option>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-16 text-gray-400 text-sm">
+                <i class="fa-regular fa-folder-open text-4xl mb-3 text-[#4799B7]/50 block"></i>
+                <div class="font-semibold text-gray-600">No hay tickets registrados con este criterio.</div>
+                <p class="text-xs text-gray-400 mt-1">Crea un nuevo ticket con el botón superior o cambia el filtro de estado.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VISTA 2: PANEL (KANBAN POR ESTADOS)        -->
+    <!-- ========================================== -->
+    <div id="view-kanban-container" class="hidden">
+        <!-- Tablero Kanban de 5 Columnas -->
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 items-start">
+            {% for st_key, st_info in statuses_catalog.items() %}
+            {% set column_tickets = tickets_by_status[st_key] %}
+            
+            <div class="bg-gray-50/70 rounded-xl border border-gray-200 flex flex-col max-h-[82vh] overflow-hidden shadow-2xs">
+                <!-- Encabezado de Columna de Estado -->
+                <div class="p-3 bg-white border-b border-gray-200 flex items-center justify-between border-t-4" style="border-top-color: {{ st_info.color }};">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid {{ st_info.icon }} text-xs" style="color: {{ st_info.color }};"></i>
+                        <span class="font-bold text-xs text-gray-800">{{ st_info.title }}</span>
+                    </div>
+                    <span class="text-[11px] font-bold px-2 py-0.5 rounded-full {{ st_info.badge_bg }} {{ st_info.badge_text }} border border-gray-100">
+                        {{ column_tickets|length }}
+                    </span>
+                </div>
+
+                <!-- Lista de Tarjetas en la Columna -->
+                <div class="p-2.5 space-y-3 overflow-y-auto flex-1">
+                    {% if column_tickets %}
+                        {% for t in column_tickets %}
+                        <div class="bg-white rounded-xl border border-gray-200 p-3.5 shadow-xs hover:shadow-md hover:border-[#1861C3] transition-all duration-150 space-y-2.5">
+                            
+                            <!-- Cabecera de la Tarjeta: ID y Prioridad -->
+                            <div class="flex items-center justify-between">
+                                <a href="/tickets/{{ t.id }}" target="_blank" rel="noopener noreferrer" 
+                                    class="font-mono font-bold text-xs text-[#125DA5] hover:text-[#1861C3] hover:underline inline-flex items-center space-x-1" 
+                                    title="Abrir ticket en pestaña nueva">
+                                    <span>#{{ t.id }}</span>
+                                    <i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-[#4799B7]"></i>
+                                </a>
+                                {% if t.priority.value == 'urgente' %}
+                                    <span class="bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded text-[10px] font-bold">Urgente</span>
+                                {% elif t.priority.value == 'alta' %}
+                                    <span class="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded text-[10px] font-bold">Alta</span>
+                                {% elif t.priority.value == 'media' %}
+                                    <span class="bg-sky-50 text-[#125DA5] border border-sky-200 px-1.5 py-0.5 rounded text-[10px] font-semibold">Media</span>
+                                {% else %}
+                                    <span class="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px]">Baja</span>
+                                {% endif %}
+                            </div>
+
+                            <!-- Título y Descripción -->
+                            <div>
+                                <a href="/tickets/{{ t.id }}" target="_blank" rel="noopener noreferrer" 
+                                    class="font-bold text-xs text-gray-900 hover:text-[#125DA5] hover:underline block leading-snug" 
+                                    title="Abrir ticket en pestaña nueva">
+                                    {{ t.title }}
+                                </a>
+                                <p class="text-gray-500 text-[11px] mt-1 line-clamp-2 leading-tight">{{ t.description }}</p>
+                            </div>
+
+                            <!-- Categorización Backoffice (Resolución, Clasificación, Medio) -->
+                            {% if module_key == 'incidencias_contratos' or t.resolution or t.classification or t.recovery_channel %}
+                            <div class="flex flex-wrap gap-1 pt-1">
+                                {% if t.resolution and t.resolution in resolucion_metadata %}
+                                    {% set rm = resolucion_metadata[t.resolution] %}
+                                    <span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-md {{ rm.badge_bg }} {{ rm.badge_text }} border {{ rm.border }}">
+                                        <i class="fa-solid {{ rm.icon }} mr-1 text-[8px]"></i> {{ t.resolution }}
+                                    </span>
+                                {% elif t.resolution %}
+                                    <span class="text-[10px] font-semibold text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded">{{ t.resolution }}</span>
+                                {% endif %}
+
+                                {% if t.classification and t.classification in clasificacion_metadata %}
+                                    {% set cm = clasificacion_metadata[t.classification] %}
+                                    <span class="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-md {{ cm.badge_bg }} {{ cm.badge_text }}">
+                                        <i class="fa-solid {{ cm.icon }} mr-1 text-[8px]"></i> {{ t.classification }}
+                                    </span>
+                                {% endif %}
+
+                                {% if t.recovery_channel and t.recovery_channel in medio_metadata %}
+                                    {% set mm = medio_metadata[t.recovery_channel] %}
+                                    <span class="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-md {{ mm.badge_bg }} {{ mm.badge_text }}">
+                                        <i class="fa-solid {{ mm.icon }} mr-1 text-[8px]"></i> {{ t.recovery_channel }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+
+                            <!-- Metadatos de Cliente / Contrato -->
+                            <div class="pt-2 border-t border-gray-100 text-[11px] space-y-1">
+                                {% if t.customer_name or t.customer_surname %}
+                                <div class="flex items-center text-gray-700">
+                                    <i class="fa-regular fa-user text-[10px] mr-1.5 text-[#4799B7] w-3"></i>
+                                    <span class="truncate font-medium">{{ t.customer_name or '' }}{% if t.customer_surname %} {{ t.customer_surname }}{% endif %}</span>
+                                </div>
+                                {% endif %}
+
+                                {% if t.customer_phone or t.customer_email %}
+                                <div class="flex items-center text-gray-500 text-[10px]">
+                                    <i class="fa-solid fa-address-book text-[10px] mr-1.5 text-gray-400 w-3"></i>
+                                    <span class="truncate">{{ t.customer_phone or t.customer_email }}</span>
+                                </div>
+                                {% endif %}
+
+                                {% if t.contract_reference or t.cups or t.company or t.department %}
+                                <div class="flex items-center text-gray-600 text-[10px] font-mono">
+                                    <i class="fa-solid fa-file-contract text-[10px] mr-1.5 text-[#125DA5] w-3"></i>
+                                    <span class="truncate">
+                                        ID: {{ t.contract_reference or t.cups or 'N/D' }}
+                                        {% if t.company %}({{ t.company }}){% endif %}
+                                        {% if t.department %}• {{ t.department }}{% endif %}
+                                    </span>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Pie de Tarjeta: Fecha y Selector para mover estado -->
+                            <div class="pt-2 border-t border-gray-100 flex items-center justify-between gap-1">
+                                <a href="/tickets/{{ t.id }}" target="_blank" rel="noopener noreferrer" 
+                                    class="text-[10px] text-gray-500 hover:text-[#125DA5] font-semibold inline-flex items-center" 
+                                    title="Abrir ticket en pestaña nueva">
+                                    <i class="fa-solid fa-up-right-from-square mr-1 text-[9px] text-[#4799B7]"></i>Abrir
+                                </a>
+
+                                <form method="POST" action="/modulo/{{ module_key }}/tickets/{{ t.id }}/status" class="inline-block">
+                                    <select name="new_status" onchange="this.form.submit()" 
+                                        class="text-[10px] font-semibold border border-gray-200 rounded-md px-1.5 py-1 bg-white hover:border-[#1861C3] focus:ring-1 focus:ring-[#1861C3] outline-none text-gray-700 cursor-pointer">
+                                        <option value="" disabled selected>Mover a...</option>
+                                        {% for target_key, target_info in statuses_catalog.items() %}
+                                            {% if target_key != t.status %}
+                                            <option value="{{ target_info.key }}">{{ target_info.title }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </select>
+                                </form>
+                            </div>
+
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="py-8 text-center text-gray-400 border border-dashed border-gray-200 rounded-lg">
+                            <i class="fa-solid fa-inbox text-xl text-gray-300 mb-1 block"></i>
+                            <span class="text-[11px]">Sin tickets</span>
+                        </div>
+                    {% endif %}
+                </div>
+
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+
+<!-- Modal Nuevo Ticket -->
+<div id="new-ticket-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-gray-100 animate-fadeIn">
+        <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+            <div class="flex items-center space-x-2">
+                <span class="p-1.5 rounded-lg bg-[#F4F8FA] text-[#125DA5]">
+                    <i class="fa-solid fa-circle-plus"></i>
+                </span>
+                <h3 class="text-base font-bold text-gray-900">Crear Nuevo Ticket en {{ module_info.title }}</h3>
+            </div>
+            <button onclick="document.getElementById('new-ticket-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 transition-colors">
+                <i class="fa-solid fa-times text-lg"></i>
+            </button>
+        </div>
+
+        <form method="POST" action="/modulo/{{ module_key }}/tickets" class="space-y-3.5 text-xs">
+            <div>
+                <label class="block font-bold text-gray-700 mb-1">Título / Asunto *</label>
+                <input type="text" name="title" required placeholder="Ej. Discrepancia en factura o rechazo ATR A3..." 
+                    class="w-full border border-gray-300 rounded-lg p-2.5 focus:border-[#1861C3] focus:ring-1 focus:ring-[#1861C3] outline-none transition-all">
+            </div>
+
+            <div>
+                <label class="block font-bold text-gray-700 mb-1">Descripción detallada *</label>
+                <textarea name="description" rows="3" required placeholder="Indica todos los detalles necesarios para tramitar la incidencia..." 
+                    class="w-full border border-gray-300 rounded-lg p-2.5 focus:border-[#1861C3] focus:ring-1 focus:ring-[#1861C3] outline-none transition-all"></textarea>
+            </div>
+
+            <!-- Campo Obligatorio: ID CONTRATO con integración Nexus Query API Assets -->
+            <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                    <label for="new-ticket-contract-id" class="block font-bold text-[#125DA5] text-xs uppercase tracking-wide">
+                        <i class="fa-solid fa-file-contract mr-1"></i> ID CONTRATO *
+                    </label>
+                    <span class="text-[10px] bg-blue-100 text-[#125DA5] font-semibold px-2 py-0.5 rounded-full">
+                        Obligatorio • Consulta Nexus
+                    </span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <div class="relative flex-1">
+                        <input type="text" id="new-ticket-contract-id" name="contract_reference" required 
+                            placeholder="Ej. DOC-2024-8831 o cnt_8f93a102b4c5" 
+                            onblur="fetchNexusForModal(this.value)"
+                            onkeydown="if(event.key === 'Enter'){ event.preventDefault(); fetchNexusForModal(this.value); }"
+                            class="w-full border border-blue-300 rounded-lg p-2.5 font-mono text-xs focus:border-[#1861C3] focus:ring-2 focus:ring-blue-100 outline-none bg-white font-semibold text-gray-800">
+                        <div id="nexus-modal-spinner" class="hidden absolute right-3 top-2.5 text-[#125DA5]">
+                            <i class="fa-solid fa-circle-notch fa-spin"></i>
+                        </div>
+                    </div>
+                    <button type="button" onclick="fetchNexusForModal(document.getElementById('new-ticket-contract-id').value)" 
+                        class="px-3.5 py-2.5 bg-[#125DA5] hover:bg-[#1861C3] text-white font-bold text-xs rounded-lg transition-colors flex items-center shadow-xs shrink-0 cursor-pointer">
+                        <i class="fa-solid fa-bolt mr-1.5 text-amber-300"></i> Consultar Nexus
+                    </button>
+                </div>
+                <div id="nexus-modal-status" class="text-[11px] text-gray-500 flex items-center pt-0.5 min-h-[18px]">
+                    <span>Introduce el ID del documento en Nexus para auto-completar titular, contacto, compañía y departamento.</span>
+                </div>
+                <!-- Botones de prueba rápida con contratos simulados de Nexus -->
+                <div class="flex items-center space-x-1.5 pt-0.5 text-[10px] text-gray-500">
+                    <span class="text-gray-400">Probar ID:</span>
+                    <button type="button" onclick="fillTestContract('DOC-2024-8831')" class="font-mono bg-white hover:bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded text-[#125DA5] cursor-pointer">DOC-2024-8831</button>
+                    <button type="button" onclick="fillTestContract('cnt_8f93a102b4c5')" class="font-mono bg-white hover:bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded text-[#125DA5] cursor-pointer">cnt_8f93a102b4c5</button>
+                    <button type="button" onclick="fillTestContract('DOC-2024-9942')" class="font-mono bg-white hover:bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded text-[#125DA5] cursor-pointer">DOC-2024-9942</button>
+                </div>
+            </div>
+
+            <!-- Datos del Cliente (Auto-rellenados por Nexus o editables) -->
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block font-bold text-gray-700 mb-1">Nombre del cliente</label>
+                    <input type="text" id="new-ticket-customer-name" name="customer_name" placeholder="María" 
+                        class="w-full border border-gray-300 rounded-lg p-2 focus:border-[#1861C3] focus:ring-1 focus:ring-[#1861C3] outline-none">
+                </div>
+                <div>
+                    <label class="block font-bold text-gray-700 mb-1">Apellido</label>
+                    <input type="text" id="new-ticket-customer-surname" name="customer_surname" placeholder="García López" 
+                        class="w-full border border-gray-300 rounded-lg p-2 focus:border-[#1861C3] focus:ring-1 focus:ring-[#1861C3] outline-none">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block font-bold text-gray-700 mb-1">Mail</label>
+                    <input type="email" id="new-ticket-customer-email" name="customer_email" placeholder="cliente@example.com" 
+                        class="w-full border border-gray-300 rounded-lg p-2 focus:border-[#1861C3] focus:ring-1 focus:ring-[#1861C3] outline-none">
+                </div>
+                <div>
+                    <label class="block font-bold text-gray-700 mb-1">Teléfono Cliente</label>
+                    <input type="text" id="new-ticket-customer-phone" name="customer_phone" placeholder="+34 600..." 
+                        class="w-full border border-gray-300 rounded-lg p-2 focus:border-[#1861C3] focus:ring-1 focus:ring-[#1861C3] outline-none">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block font-bold text-gray-700 mb-1">Compañía</label>
+                    <input type="text" id="new-ticket-company" name="company" placeholder="Ej. Iberdrola, TotalEnergies, Naturgy..." 
+                        class="w-full border border-gray-300 rounded-lg p-2 focus:border-[#1861C3] focus:ring-1 focus:ring-[#1861C3] outline-none">
+                </div>
+                <div>
+                    <label class="block font-bold text-gray-700 mb-1">Departamento</label>
+                    <input type="text" id="new-ticket-department" name="department" placeholder="Ej. Electricidad, Gas..." 
+                        class="w-full border border-gray-300 rounded-lg p-2 focus:border-[#1861C3] focus:ring-1 focus:ring-[#1861C3] outline-none">
+                </div>
+            </div>
+
+            <div>
+                <label class="block font-bold text-gray-700 mb-1">Prioridad</label>
+                <select name="priority" class="w-full border border-gray-300 rounded-lg p-2 bg-white outline-none focus:border-[#1861C3]">
+                    <option value="baja">Baja</option>
+                    <option value="media" selected>Media</option>
+                    <option value="alta">Alta</option>
+                    <option value="urgente">Urgente</option>
+                </select>
+            </div>
+
+            {% if module_key == 'incidencias_contratos' %}
+            <div class="p-3 bg-blue-50/50 border border-blue-100 rounded-xl space-y-2.5">
+                <div class="text-[11px] font-bold text-[#125DA5] uppercase tracking-wider flex items-center">
+                    <i class="fa-solid fa-tags mr-1.5"></i> Categorización Backoffice (Picklists)
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                    <div>
+                        <label class="block font-bold text-gray-700 mb-1">Resolución</label>
+                        <select name="resolution" class="w-full border border-gray-300 rounded-lg p-2 bg-white outline-none focus:border-[#1861C3]">
+                            {% for res in resoluciones_catalog %}
+                            <option value="{{ res }}" {% if res == 'Nuevo' %}selected{% endif %}>{{ res }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-gray-700 mb-1">Clasificación</label>
+                        <select name="classification" class="w-full border border-gray-300 rounded-lg p-2 bg-white outline-none focus:border-[#1861C3]">
+                            <option value="" selected>-- Seleccionar --</option>
+                            {% for cla in clasificaciones_catalog %}
+                            <option value="{{ cla }}">{{ cla }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-gray-700 mb-1">Medio Recuperación</label>
+                        <select name="recovery_channel" class="w-full border border-gray-300 rounded-lg p-2 bg-white outline-none focus:border-[#1861C3]">
+                            <option value="" selected>-- Seleccionar --</option>
+                            {% for med in medios_catalog %}
+                            <option value="{{ med }}">{{ med }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="pt-3 border-t border-gray-100 flex justify-end space-x-2">
+                <button type="button" onclick="document.getElementById('new-ticket-modal').classList.add('hidden')" 
+                    class="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
+                    Cancelar
+                </button>
+                <button type="submit" 
+                    class="px-5 py-2 bg-[#125DA5] hover:bg-[#1861C3] text-white font-bold rounded-lg shadow-sm transition-all">
+                    Guardar Ticket
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Script para Conmutar Vistas (Lista / Panel) y persistir preferencia -->
+<script>
+    function setViewMode(mode) {
+        const tableView = document.getElementById('view-table-container');
+        const kanbanView = document.getElementById('view-kanban-container');
+        const btnTable = document.getElementById('btn-view-table');
+        const btnKanban = document.getElementById('btn-view-kanban');
+
+        if (mode === 'kanban') {
+            tableView.classList.add('hidden');
+            kanbanView.classList.remove('hidden');
+
+            btnKanban.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-md font-semibold transition-all duration-150 bg-white text-[#125DA5] shadow-xs";
+            btnTable.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-md font-semibold transition-all duration-150 text-gray-500 hover:text-[#125DA5]";
+            localStorage.setItem('posventa_preferred_view', 'kanban');
+        } else {
+            kanbanView.classList.add('hidden');
+            tableView.classList.remove('hidden');
+
+            btnTable.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-md font-semibold transition-all duration-150 bg-white text-[#125DA5] shadow-xs";
+            btnKanban.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-md font-semibold transition-all duration-150 text-gray-500 hover:text-[#125DA5]";
+            localStorage.setItem('posventa_preferred_view', 'table');
+        }
+    }
+
+    // Inicializar con la preferencia guardada (o vista lista por defecto)
+    document.addEventListener('DOMContentLoaded', function() {
+        const savedView = localStorage.getItem('posventa_preferred_view') || 'table';
+        setViewMode(savedView);
+    });
+
+    // =========================================================================
+    // CONSULTA AUTOMÁTICA A NEXUS QUERY API ASSETS PARA CREACIÓN DE TICKETS
+    // =========================================================================
+    async function fetchNexusForModal(contractId) {
+        if (!contractId || !contractId.trim()) return;
+        const cid = contractId.trim();
+        const spinner = document.getElementById('nexus-modal-spinner');
+        const statusMsg = document.getElementById('nexus-modal-status');
+        
+        if (spinner) spinner.classList.remove('hidden');
+        if (statusMsg) {
+            statusMsg.innerHTML = '<span class="text-blue-600 font-semibold flex items-center"><i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i> Consultando contrato en Nexus Query API Assets...</span>';
+        }
+
+        try {
+            const res = await fetch(`/api/v1/nexus/contracts/${encodeURIComponent(cid)}`);
+            if (!res.ok) {
+                throw new Error(`Contrato '${cid}' no encontrado (${res.status})`);
+            }
+            const json = await res.json();
+            const data = json.data;
+            if (!data) throw new Error("Estructura de respuesta no válida");
+
+            const cust = data.customer || {};
+            const prov = data.provider || {};
+
+            // 1. Rellenar Nombre del cliente y Apellido
+            const nameInput = document.getElementById('new-ticket-customer-name');
+            const surnameInput = document.getElementById('new-ticket-customer-surname');
+            if (cust.first_name) {
+                if (nameInput) nameInput.value = cust.first_name;
+                if (surnameInput) surnameInput.value = cust.last_name || '';
+            } else if (cust.full_name) {
+                const parts = cust.full_name.trim().split(/\s+/);
+                if (nameInput) nameInput.value = parts[0] || '';
+                if (surnameInput) surnameInput.value = parts.slice(1).join(' ') || '';
+            }
+
+            // 2. Rellenar Mail y Teléfono
+            const emailInput = document.getElementById('new-ticket-customer-email');
+            if (emailInput && cust.email) emailInput.value = cust.email;
+
+            const phoneInput = document.getElementById('new-ticket-customer-phone');
+            if (phoneInput && cust.phone) phoneInput.value = cust.phone;
+
+            // 3. Rellenar Compañía
+            const companyInput = document.getElementById('new-ticket-company');
+            const compName = prov.name || data.company || '';
+            if (companyInput && compName) companyInput.value = compName;
+
+            // 4. Rellenar Departamento
+            const deptInput = document.getElementById('new-ticket-department');
+            const deptName = data.department || data.commodity_label || data.commodity || 'Electricidad';
+            if (deptInput && deptName) deptInput.value = deptName;
+
+            if (statusMsg) {
+                statusMsg.innerHTML = `<span class="text-emerald-700 font-bold flex items-center"><i class="fa-solid fa-circle-check text-emerald-600 mr-1.5"></i> Datos obtenidos de Nexus: <strong>${cust.full_name || (cust.first_name ? cust.first_name + ' ' + (cust.last_name || '') : 'Cliente')}</strong> (${compName} • ${deptName})</span>`;
+            }
+        } catch (err) {
+            console.warn("Nexus lookup warning:", err);
+            if (statusMsg) {
+                statusMsg.innerHTML = `<span class="text-amber-700 font-medium flex items-center"><i class="fa-solid fa-triangle-exclamation mr-1.5 text-amber-500"></i> No se obtuvieron datos automáticos de Nexus (${err.message}). Puedes rellenarlos manualmente.</span>`;
+            }
+        } finally {
+            if (spinner) spinner.classList.add('hidden');
+        }
+    }
+
+    function fillTestContract(id) {
+        const input = document.getElementById('new-ticket-contract-id');
+        if (input) {
+            input.value = id;
+            fetchNexusForModal(id);
+        }
+    }
+</script>
+{% endblock %}

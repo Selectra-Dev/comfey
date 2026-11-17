@@ -1,0 +1,10 @@
+{
+  "pre-commit": {
+    "command": "python -m unittest discover tests",
+    "description": "Ejecutar pruebas unitarias antes de cada commit"
+  },
+  "commit-msg": {
+    "pattern": "^(feat|fix|docs|refactor|test|chore|perf)(\\([a-zA-Z0-9_.-]+\\))?: .{1,80}$",
+    "description": "Forzar formato Conventional Commits (ej. feat: nueva funcionalidad)"
+  }
+}
