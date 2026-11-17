@@ -1,0 +1,41 @@
+//----------------------------------------------------------
+// Project: widget
+//----------------------------------------------------------
+
+
+//
+// Vendor
+//
+@import 'breakpoint-sass/stylesheets/breakpoint';
+
+
+//
+// Design System
+//
+
+// 00-Core
+@import 'integration-common-files/src/scss/00-core/themes/theme--selectra';
+@import 'integration-common-files/src/scss/00-core/variables';
+@import 'integration-common-files/src/scss/00-core/reboot';
+@import 'integration-common-files/src/scss/00-core/grid';
+
+// 00-Utilities
+
+// 01-Atoms
+@import 'integration-common-files/src/scss/01-atoms/typography/typography--headings';
+@import 'integration-common-files/src/scss/01-atoms/typography/typography--link';
+@import 'integration-common-files/src/scss/01-atoms/typography/typography--paragraph';
+
+// 02-Molecules
+// 03-Organisms
+
+
+//
+// Project
+//
+
+// 00-Utilities
+// 00-Atoms
+// 02-Molecules
+// 03-Organisms
+// 04-Templates

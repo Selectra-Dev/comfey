@@ -1,0 +1,70 @@
+{
+  "extends":
+  [
+    "eslint:recommended",
+    "idiomatic",
+    "plugin:jsdoc/recommended",
+    "plugin:compat/recommended"
+  ],
+  "rules":
+  {
+    "quotes"  : [ 2, "single" ],
+    "no-alert": 0,
+    "no-multi-spaces":
+    [
+      1,
+      {
+        "ignoreEOLComments": false,
+        "exceptions":
+        {
+          "Property"            : true,
+          "AssignmentExpression": true,
+          "VariableDeclarator"  : true
+        }
+      }
+    ],
+    "key-spacing": [0]
+  },
+  "parserOptions":
+  {
+    "ecmaVersion": 9,
+    "sourceType" : "module"
+  },
+  "env":
+  {
+    "browser": true,
+    "node"   : true,
+    "mocha"  : true,
+    "es6"    : true
+  },
+  "plugins" : [ "jsdoc" ],
+  "settings":
+  {
+    "polyfills":
+    [
+      "Number.isInteger",
+      "Number.parseInt",
+      "Number.parseFloat",
+      "Array.from",
+      "Array.prototype.forEach",
+      "Array.prototype.includes",
+      "Array.prototype.slice",
+      "Math.sign",
+      "String.fromCodePoint",
+      "String.prototype.codePointAt",
+      "String.prototype.includes",
+      "String.prototype.repeat",
+      "Object.assign",
+      "Symbol",
+      "Promise",
+      "Nodelist.prototype.forEach",
+      "CustomEvent",
+      "ParentNode.append",
+      "Element.closest",
+      "Element.matches",
+      "Element.classList",
+      "IntersectionObserver",
+      "fetch"
+    ]
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "widget-launcher",
+  "version": "0.0.0",
+  "description": "Widget boilerplate",
+  "author": "Selectra's front-end team",
+  "license": "ISC",
+  "repository": "https://github.com/Selectra-Dev/widget-launcher",
+  "bugs": "https://github.com/Selectra-Dev/widget-launcher/issues",
+  "homepage": "https://github.com/Selectra-Dev/widget-launcher#readme",
+  "scripts": {
+    "build-dev": "gulp build",
+    "build-prod": "NODE_ENV=prod gulp build",
+    "build-test": "NODE_ENV=test gulp build",
+    "css-dev": "gulp css",
+    "css-prod": "NODE_ENV=prod gulp css",
+    "css-test": "NODE_ENV=test gulp css",
+    "html-dev": "gulp html",
+    "html-prod": "NODE_ENV=prod gulp html",
+    "html-test": "NODE_ENV=test gulp html",
+    "purgecss-dev": "gulp purgecss",
+    "purgecss-prod": "NODE_ENV=prod gulp purgecss",
+    "script-dev": "gulp script",
+    "script-prod": "NODE_ENV=prod gulp script",
+    "script-test": "NODE_ENV=test gulp script",
+    "sprite-dev": "node node_modules/design-system-icons/npm/tasks/svg-sprite/svg-sprite.js",
+    "sprite-prod": "NODE_ENV=prod node node_modules/design-system-icons/npm/tasks/svg-sprite/svg-sprite.js",
+    "sprite-test": "NODE_ENV=test node node_modules/design-system-icons/npm/tasks/svg-sprite/svg-sprite.js",
+    "watch": "gulp watch"
+  },
+  "dependencies": {
+    "design-system-icons": "git+ssh://git@github.com/Selectra-Dev/design-system-icons.git",
+    "integration-common-files": "git+ssh://git@github.com/Selectra-Dev/integration-common-files.git"
+  },
+  "devDependencies": {
+    "design-system-tools": "git+ssh://git@github.com/Selectra-Dev/design-system-tools.git",
+    "eslint": "^6.6.0",
+    "eslint-config-idiomatic": "^4.0.0",
+    "eslint-plugin-compat": "^3.3.0",
+    "stylelint": "^10.1.0",
+    "stylelint-config-recommended-scss": "^3.3.0",
+    "stylelint-config-standard": "^18.3.0",
+    "stylelint-order": "^3.1.1",
+    "stylelint-scss": "^3.12.1"
+  },
+  "sprite-list": [
+    "design-system-doc"
+  ]
+}
