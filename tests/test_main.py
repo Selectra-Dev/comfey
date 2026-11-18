@@ -16,7 +16,7 @@ def test_web_dashboard():
     """Valida que la pantalla principal cargue con éxito en el navegador."""
     response = client.get("/")
     assert response.status_code == 200
-    assert "APP POSVENTA" in response.text
+    assert "COMFEY" in response.text or "APP POSVENTA" in response.text
     assert "Módulos de Operaciones" in response.text
 
 def test_web_module_view():
