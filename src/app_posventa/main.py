@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
@@ -24,6 +25,7 @@ from .models.enums import (
 )
 from .models.ticket import TicketCreate, TicketUpdate, ActivityType
 from .models.user import User
+from .models.email_config import ModuleEmailSetting, EmailTemplate
 from .database.firestore import repo
 from .auth.iap import get_current_user
 from .auth.rbac import require_admin, require_module_access
@@ -297,7 +299,10 @@ def web_ticket_detail(
         raise HTTPException(status_code=403, detail="No tienes permisos para acceder a este módulo.")
 
     module_info = MODULE_METADATA.get(ticket.module)
-    email_config = MODULE_EMAIL_CONFIG.get(ticket.module, MODULE_EMAIL_CONFIG[ModuleEnum.INCIDENCIAS_CONTRATOS])
+    email_setting = repo.get_module_email_setting(ticket.module)
+    email_config = email_setting.model_dump()
+    templates_list = repo.list_email_templates(module=ticket.module.value)
+    templates_json = json.dumps([t.model_dump() for t in templates_list], default=str)
 
     nexus_contract = None
     ref_to_query = ticket.contract_reference or "DOC-2024-8831"
@@ -320,6 +325,8 @@ def web_ticket_detail(
             "modules_catalog": MODULE_METADATA,
             "statuses_catalog": STATUS_METADATA,
             "email_config": email_config,
+            "email_templates": templates_list,
+            "email_templates_json": templates_json,
             "active_tab": tab,
             "activities": ticket.activities,
             "resoluciones_catalog": BACKOFFICE_RESOLUCIONES,
@@ -401,13 +408,20 @@ def web_ticket_send_email(
     if not ticket or not current_user.has_module_access(ticket.module):
         raise HTTPException(status_code=403, detail="Sin permisos para este ticket.")
 
-    email_config = MODULE_EMAIL_CONFIG.get(ticket.module, MODULE_EMAIL_CONFIG[ModuleEnum.INCIDENCIAS_CONTRATOS])
-    sender_email = email_config["email"]
+    module_setting = repo.get_module_email_setting(ticket.module)
+    sender_email = module_setting.email
+    sender_name = module_setting.sender_name
+
+    body_text = content.strip()
+    if module_setting.signature and module_setting.signature.strip() not in body_text:
+        body_text += f"\n\n{module_setting.signature.strip()}"
+    if module_setting.rgpd_footer and module_setting.rgpd_footer.strip() not in body_text:
+        body_text += f"\n\n---\n{module_setting.rgpd_footer.strip()}"
 
     metadata = {
         "sender": sender_email,
-        "sender_name": email_config["name"],
-        "channel_type": email_config["account_type"],
+        "sender_name": sender_name,
+        "channel_type": module_setting.account_type,
         "recipient": recipient.strip(),
         "cc": cc.strip() if cc else "",
         "subject": subject.strip(),
@@ -419,7 +433,7 @@ def web_ticket_send_email(
         activity_type=ActivityType.EMAIL,
         author=current_user.email,
         author_name=current_user.name or current_user.email.split("@")[0].replace(".", " ").title(),
-        content=content.strip(),
+        content=body_text,
         metadata=metadata
     )
     return RedirectResponse(url=f"/tickets/{ticket_id}?tab=emails", status_code=status.HTTP_303_SEE_OTHER)
@@ -544,7 +558,11 @@ def web_ticket_update_backoffice_fields(
     return RedirectResponse(url=f"/tickets/{ticket_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/admin/roles", response_class=HTMLResponse, tags=["Interfaz Web"])
-def web_admin_roles(request: Request, admin_user: User = Depends(require_admin)):
+def web_admin_roles(
+    request: Request,
+    saved_user: Optional[str] = None,
+    admin_user: User = Depends(require_admin)
+):
     """Pantalla del Administrador para configurar roles y acceso a módulos por usuario."""
     users = repo.list_users()
     return templates.TemplateResponse(
@@ -555,12 +573,14 @@ def web_admin_roles(request: Request, admin_user: User = Depends(require_admin))
             "dev_mode": settings.dev_mode,
             "active_page": "admin_roles",
             "modules_catalog": MODULE_METADATA,
-            "users": users
+            "users": users,
+            "saved_user": saved_user
         }
     )
 
 @app.post("/admin/roles/{user_email}", tags=["Interfaz Web"])
 def web_admin_update_roles(
+    request: Request,
     user_email: str,
     role: str = Form(...),
     modules: List[str] = Form(default=[]),
@@ -578,7 +598,138 @@ def web_admin_update_roles(
         user.allowed_modules = [ModuleEnum(m) for m in modules if m in [e.value for e in ModuleEnum]]
 
     repo.save_user(user)
-    return RedirectResponse(url="/admin/roles", status_code=status.HTTP_303_SEE_OTHER)
+
+    as_user = request.query_params.get("as_user")
+    user_display = user.name or user.email
+    redirect_url = f"/admin/roles?saved_user={user_display}"
+    if as_user:
+        redirect_url += f"&as_user={as_user}"
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ============================================================================
+# CONFIGURACIÓN DE CORREO, FIRMAS, RGPD Y PLANTILLAS (EXCLUSIVO ADMINISTRADORES)
+# ============================================================================
+
+@app.get("/admin/configuracion", response_class=HTMLResponse, tags=["Configuración"])
+def web_admin_configuracion(
+    request: Request,
+    tab: str = "cuentas",
+    saved_module: Optional[str] = None,
+    saved_tpl: Optional[str] = None,
+    deleted_tpl: Optional[str] = None,
+    admin_user: User = Depends(require_admin)
+):
+    """Pantalla del Administrador para configurar cuentas de correo, firmas, RGPD y plantillas."""
+    email_settings = repo.get_email_settings()
+    templates_list = repo.list_email_templates()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_config.html",
+        context={
+            "current_user": admin_user,
+            "dev_mode": settings.dev_mode,
+            "active_page": "admin_configuracion",
+            "modules_catalog": MODULE_METADATA,
+            "email_settings": email_settings,
+            "templates": templates_list,
+            "active_tab": tab,
+            "saved_module": saved_module,
+            "saved_tpl": saved_tpl,
+            "deleted_tpl": deleted_tpl
+        }
+    )
+
+@app.post("/admin/configuracion/emails", tags=["Configuración"])
+def web_admin_save_email_config(
+    request: Request,
+    module: str = Form(...),
+    email: str = Form(...),
+    sender_name: str = Form(...),
+    account_type: str = Form("google_group"),
+    signature: Optional[str] = Form(None),
+    rgpd_footer: Optional[str] = Form(None),
+    tab: str = Form("cuentas"),
+    admin_user: User = Depends(require_admin)
+):
+    """Guarda la configuración de cuenta de correo, firma y RGPD para un módulo específico."""
+    mod_enum = ModuleEnum(module)
+    setting = ModuleEmailSetting(
+        module=mod_enum,
+        email=email.strip(),
+        sender_name=sender_name.strip(),
+        account_type=account_type.strip(),
+        type_label="Bandeja de Grupo de Google Workspace" if account_type == "google_group" else "Cuenta Individual Google Workspace (Usuario y Contraseña)",
+        signature=signature.strip() if signature else "",
+        rgpd_footer=rgpd_footer.strip() if rgpd_footer else ""
+    )
+    repo.save_module_email_setting(setting)
+
+    as_user = request.query_params.get("as_user")
+    mod_title = MODULE_METADATA.get(mod_enum, {}).get("title", module)
+    redirect_url = f"/admin/configuracion?tab={tab}&saved_module={mod_title}"
+    if as_user:
+        redirect_url += f"&as_user={as_user}"
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+@app.post("/admin/configuracion/plantillas", tags=["Configuración"])
+def web_admin_save_email_template(
+    request: Request,
+    template_id: Optional[str] = Form(None),
+    name: str = Form(...),
+    module: str = Form(...),
+    subject: str = Form(...),
+    body: str = Form(...),
+    admin_user: User = Depends(require_admin)
+):
+    """Crea o actualiza una plantilla de correo electrónico corporativo."""
+    if template_id and template_id.strip():
+        existing = repo.get_email_template(template_id.strip())
+        if existing:
+            existing.name = name.strip()
+            existing.module = module.strip()
+            existing.subject = subject.strip()
+            existing.body = body.strip()
+            repo.save_email_template(existing)
+        else:
+            new_tpl = EmailTemplate(
+                id=template_id.strip(),
+                name=name.strip(),
+                module=module.strip(),
+                subject=subject.strip(),
+                body=body.strip()
+            )
+            repo.save_email_template(new_tpl)
+    else:
+        new_tpl = EmailTemplate(
+            name=name.strip(),
+            module=module.strip(),
+            subject=subject.strip(),
+            body=body.strip()
+        )
+        repo.save_email_template(new_tpl)
+
+    as_user = request.query_params.get("as_user")
+    redirect_url = "/admin/configuracion?tab=plantillas&saved_tpl=1"
+    if as_user:
+        redirect_url += f"&as_user={as_user}"
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+@app.post("/admin/configuracion/plantillas/{template_id}/delete", tags=["Configuración"])
+def web_admin_delete_email_template(
+    request: Request,
+    template_id: str,
+    admin_user: User = Depends(require_admin)
+):
+    """Elimina una plantilla de correo electrónico del catálogo."""
+    repo.delete_email_template(template_id)
+
+    as_user = request.query_params.get("as_user")
+    redirect_url = "/admin/configuracion?tab=plantillas&deleted_tpl=1"
+    if as_user:
+        redirect_url += f"&as_user={as_user}"
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ============================================================================

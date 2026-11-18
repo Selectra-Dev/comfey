@@ -6,6 +6,7 @@ from ..config import settings
 from ..models.enums import ModuleEnum, Role, TicketStatus, Priority, MODULE_EMAIL_CONFIG
 from ..models.user import User
 from ..models.ticket import Ticket, TicketCreate, TicketUpdate, TicketNote, TicketActivity, ActivityType, utc_now
+from ..models.email_config import ModuleEmailSetting, EmailTemplate, DEFAULT_RGPD_FOOTER, DEFAULT_SIGNATURE_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,8 @@ class DataRepository:
         self._using_fallback = False
         self._memory_users: Dict[str, User] = {}
         self._memory_tickets: Dict[str, Ticket] = {}
+        self._memory_email_settings: Dict[str, ModuleEmailSetting] = {}
+        self._memory_email_templates: Dict[str, EmailTemplate] = {}
         self._init_client()
         self._seed_default_data()
 
@@ -257,6 +260,84 @@ class DataRepository:
         for t in sample_tickets:
             self._memory_tickets[t.id] = t
 
+        # Sembrar configuraciones de email por defecto para cada módulo
+        for mod, cfg in MODULE_EMAIL_CONFIG.items():
+            self._memory_email_settings[mod.value] = ModuleEmailSetting(
+                module=mod,
+                email=cfg["email"],
+                sender_name=cfg["name"],
+                account_type=cfg.get("account_type", "google_group"),
+                type_label=cfg.get("type_label", "Bandeja de Grupo de Google Workspace"),
+                description=cfg.get("description", ""),
+                signature=f"Atentamente,\n{cfg['name']}\nTeléfono: 91 123 45 67 | https://selectra.es",
+                rgpd_footer=DEFAULT_RGPD_FOOTER
+            )
+
+        # Sembrar plantillas de correo por defecto
+        default_tpls = [
+            EmailTemplate(
+                id="tpl-001",
+                name="Solicitud de Documentación (Factura / DNI)",
+                module="todos",
+                subject="[#{{ticket_id}}] Solicitud de documentación adicional - Selectra",
+                body=(
+                    "Estimado/a {{customer_name}},\n\n"
+                    "Para poder avanzar en la tramitación de tu expediente con {{company}}, necesitamos que nos facilites la siguiente documentación:\n\n"
+                    "- Copia de la última factura recibida\n"
+                    "- Copia del DNI/NIE del titular\n\n"
+                    "Puedes responder directamente a este correo adjuntando los archivos solicitados.\n\n"
+                    "Gracias por tu colaboración."
+                )
+            ),
+            EmailTemplate(
+                id="tpl-002",
+                name="Trámite en Curso con Compañía",
+                module="todos",
+                subject="[#{{ticket_id}}] Actualización: Tu gestión está en curso - Selectra",
+                body=(
+                    "Estimado/a {{customer_name}},\n\n"
+                    "Te informamos de que hemos trasladado tu gestión a {{company}} con referencia interna de contrato {{contract_reference}}.\n\n"
+                    "El plazo de respuesta estimado por la compañía es de 48 a 72 horas hábiles. En cuanto recibamos novedades o confirmación oficial, nos pondremos de nuevo en contacto contigo."
+                )
+            ),
+            EmailTemplate(
+                id="tpl-003",
+                name="Resolución Favorable del Caso",
+                module="todos",
+                subject="[#{{ticket_id}}] Resolución favorable de tu gestión - Selectra",
+                body=(
+                    "Estimado/a {{customer_name}},\n\n"
+                    "Nos complace comunicarte que la incidencia referida en el ticket #{{ticket_id}} ha sido resuelta satisfactoriamente con {{company}}.\n\n"
+                    "No dudes en responder a este correo si tienes cualquier duda adicional o requieres soporte extra.\n\n"
+                    "Gracias por confiar en Selectra."
+                )
+            ),
+            EmailTemplate(
+                id="tpl-004",
+                name="Subsanación de Rechazo ATR de Distribuidora",
+                module=ModuleEnum.RECHAZOS_ATR.value,
+                subject="[#{{ticket_id}}] Subsanación de anomalía en solicitud de acometida / ATR con distribuidora",
+                body=(
+                    "Estimado/a {{customer_name}},\n\n"
+                    "La empresa distribuidora nos ha trasladado una discrepancia en el trámite de acceso para el CUPS {{cups}}.\n\n"
+                    "Desde Selectra Posventa estamos gestionando activamente la subsanación técnica ante {{company}} para reactivar el suministro en el menor plazo posible."
+                )
+            ),
+            EmailTemplate(
+                id="tpl-005",
+                name="Confirmación de Supresión de Datos (RGPD)",
+                module=ModuleEnum.BORRADO_DATOS.value,
+                subject="[#{{ticket_id}}] Confirmación de trámite de derechos de protección de datos (RGPD)",
+                body=(
+                    "Estimado/a {{customer_name}},\n\n"
+                    "Acusamos recibo de su solicitud de supresión y cese de comunicaciones en relación al expediente #{{ticket_id}}.\n\n"
+                    "Le confirmamos que nuestro Delegado de Protección de Datos (DPO) ha procesado la baja técnica de sus datos conforme al RGPD y la LOPDGDD."
+                )
+            )
+        ]
+        for tpl in default_tpls:
+            self._memory_email_templates[tpl.id] = tpl
+
     def get_user(self, email: str) -> Optional[User]:
         email_clean = email.lower()
         if not self._using_fallback and self._firestore_client:
@@ -452,5 +533,108 @@ class DataRepository:
             author=author,
             content=content
         )
+
+    # =========================================================================
+    # GESTIÓN DE CONFIGURACIÓN DE CORREOS Y PLANTILLAS
+    # =========================================================================
+
+    def get_email_settings(self) -> Dict[str, ModuleEmailSetting]:
+        if not self._using_fallback and self._firestore_client:
+            try:
+                docs = self._firestore_client.collection("email_settings").stream()
+                loaded = {}
+                for doc in docs:
+                    data = doc.to_dict()
+                    setting = ModuleEmailSetting(**data)
+                    loaded[setting.module.value] = setting
+                if loaded:
+                    self._memory_email_settings.update(loaded)
+                    return self._memory_email_settings
+            except Exception as e:
+                logger.error("Error al obtener email_settings en Firestore: %s", e)
+        return self._memory_email_settings
+
+    def get_module_email_setting(self, module: ModuleEnum) -> ModuleEmailSetting:
+        all_settings = self.get_email_settings()
+        if module.value in all_settings:
+            return all_settings[module.value]
+
+        base_cfg = MODULE_EMAIL_CONFIG.get(module, MODULE_EMAIL_CONFIG[ModuleEnum.INCIDENCIAS_CONTRATOS])
+        setting = ModuleEmailSetting(
+            module=module,
+            email=base_cfg["email"],
+            sender_name=base_cfg["name"],
+            account_type=base_cfg.get("account_type", "google_group"),
+            type_label=base_cfg.get("type_label", "Bandeja de Grupo de Google Workspace"),
+            description=base_cfg.get("description", ""),
+            signature=f"Atentamente,\n{base_cfg['name']}\nTeléfono: 91 123 45 67 | https://selectra.es",
+            rgpd_footer=DEFAULT_RGPD_FOOTER
+        )
+        self._memory_email_settings[module.value] = setting
+        return setting
+
+    def save_module_email_setting(self, setting: ModuleEmailSetting) -> ModuleEmailSetting:
+        self._memory_email_settings[setting.module.value] = setting
+        if not self._using_fallback and self._firestore_client:
+            try:
+                data = setting.model_dump()
+                data["module"] = setting.module.value
+                self._firestore_client.collection("email_settings").document(setting.module.value).set(data)
+            except Exception as e:
+                logger.error("Error guardando email_setting en Firestore: %s", e)
+        return setting
+
+    def list_email_templates(self, module: Optional[str] = None) -> List[EmailTemplate]:
+        templates = list(self._memory_email_templates.values())
+        if not self._using_fallback and self._firestore_client:
+            try:
+                docs = self._firestore_client.collection("email_templates").stream()
+                loaded = []
+                for doc in docs:
+                    d = doc.to_dict()
+                    if "created_at" in d and isinstance(d["created_at"], str):
+                        d["created_at"] = datetime.fromisoformat(d["created_at"])
+                    if "updated_at" in d and isinstance(d["updated_at"], str):
+                        d["updated_at"] = datetime.fromisoformat(d["updated_at"])
+                    loaded.append(EmailTemplate(**d))
+                if loaded:
+                    templates = loaded
+                    self._memory_email_templates = {t.id: t for t in templates}
+            except Exception as e:
+                logger.error("Error al listar plantillas en Firestore: %s", e)
+
+        if module and module != "todos":
+            templates = [t for t in templates if t.module in ("todos", module)]
+        return sorted(templates, key=lambda x: x.created_at, reverse=False)
+
+    def get_email_template(self, template_id: str) -> Optional[EmailTemplate]:
+        templates = self.list_email_templates()
+        for t in templates:
+            if t.id == template_id:
+                return t
+        return None
+
+    def save_email_template(self, template: EmailTemplate) -> EmailTemplate:
+        template.updated_at = utc_now()
+        self._memory_email_templates[template.id] = template
+        if not self._using_fallback and self._firestore_client:
+            try:
+                data = template.model_dump()
+                data["created_at"] = template.created_at.isoformat()
+                data["updated_at"] = template.updated_at.isoformat()
+                self._firestore_client.collection("email_templates").document(template.id).set(data)
+            except Exception as e:
+                logger.error("Error guardando plantilla en Firestore: %s", e)
+        return template
+
+    def delete_email_template(self, template_id: str) -> bool:
+        if template_id in self._memory_email_templates:
+            del self._memory_email_templates[template_id]
+        if not self._using_fallback and self._firestore_client:
+            try:
+                self._firestore_client.collection("email_templates").document(template_id).delete()
+            except Exception as e:
+                logger.error("Error eliminando plantilla en Firestore: %s", e)
+        return True
 
 repo = DataRepository()

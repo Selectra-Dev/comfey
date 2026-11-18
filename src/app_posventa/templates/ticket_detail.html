@@ -228,18 +228,37 @@
                             </div>
                         </div>
 
-                        <!-- Plantillas Rápidas -->
-                        <div class="flex items-center space-x-2">
-                            <span class="text-gray-500 font-medium text-[11px]"><i class="fa-solid fa-wand-magic-sparkles text-[#4799B7] mr-1"></i>Insertar plantilla:</span>
-                            <button type="button" onclick="applyEmailTemplate('docs')" class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-[11px] text-gray-700 transition-colors">
-                                Solicitar documentos
-                            </button>
-                            <button type="button" onclick="applyEmailTemplate('tramitando')" class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-[11px] text-gray-700 transition-colors">
-                                Trámite en curso
-                            </button>
-                            <button type="button" onclick="applyEmailTemplate('resuelto')" class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-[11px] text-gray-700 transition-colors">
-                                Caso resuelto
-                            </button>
+                        <!-- Plantillas de Correo Dinámicas y Configuradas -->
+                        <div class="bg-gray-50/80 p-3 rounded-xl border border-gray-200 space-y-2">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <label for="email-template-select" class="text-xs font-bold text-gray-700 flex items-center space-x-1.5">
+                                    <i class="fa-solid fa-file-lines text-[#125DA5]"></i>
+                                    <span>Plantilla Oficial de Correo:</span>
+                                </label>
+                                {% if current_user.role.value == 'admin' %}
+                                <a href="/admin/configuracion" target="_blank" class="text-[11px] text-[#125DA5] hover:underline flex items-center space-x-1">
+                                    <i class="fa-solid fa-sliders text-[10px]"></i>
+                                    <span>Gestionar Plantillas</span>
+                                </a>
+                                {% endif %}
+                            </div>
+
+                            <select id="email-template-select" onchange="onSelectEmailTemplate(this.value)"
+                                class="w-full border border-gray-300 rounded-lg p-2 bg-white text-xs outline-none focus:border-[#125DA5]">
+                                <option value="">-- Selecciona una plantilla para autorellenar asunto y cuerpo --</option>
+                                {% for tpl in email_templates %}
+                                <option value="{{ tpl.id }}">{{ tpl.name }} ({{ '🌐 Global' if tpl.module == 'todos' else tpl.module }})</option>
+                                {% endfor %}
+                            </select>
+
+                            <div class="flex items-center space-x-2 pt-1 flex-wrap gap-y-1">
+                                <span class="text-gray-500 font-medium text-[11px]"><i class="fa-solid fa-wand-magic-sparkles text-[#4799B7] mr-1"></i>Acceso rápido:</span>
+                                {% for tpl in email_templates[:3] %}
+                                <button type="button" onclick="onSelectEmailTemplate('{{ tpl.id }}')" class="px-2.5 py-1 bg-white hover:bg-gray-100 border border-gray-200 rounded text-[11px] text-gray-700 transition-colors">
+                                    {{ tpl.name }}
+                                </button>
+                                {% endfor %}
+                            </div>
                         </div>
 
                         <div>
@@ -249,11 +268,27 @@
 
 Nos ponemos en contacto contigo desde Selectra Posventa en relación con tu expediente #{{ ticket.id }} ({{ ticket.title }}).
 
-Estamos realizando las comprobaciones pertinentes y te informaremos en cuanto dispongamos de una resolución.
+Estamos realizando las comprobaciones pertinentes y te informaremos en cuanto dispongamos de una resolución.</textarea>
+                        </div>
 
-Un cordial saludo,
-Equipo Posventa Selectra
-{{ email_config.email }}</textarea>
+                        <!-- Previsualización de Firma y Cláusula RGPD Configurada del Módulo -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                            <div class="bg-gray-50 p-2.5 rounded-xl border border-gray-200">
+                                <span class="text-[10px] font-bold text-gray-600 uppercase tracking-wider block mb-1">
+                                    <i class="fa-solid fa-signature text-[#125DA5] mr-1"></i>Firma Oficial del Módulo
+                                </span>
+                                <div class="text-[11px] text-gray-700 whitespace-pre-line font-sans bg-white p-2 rounded border border-gray-100 max-h-20 overflow-y-auto">
+                                    {{ email_config.signature }}
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 p-2.5 rounded-xl border border-gray-200">
+                                <span class="text-[10px] font-bold text-gray-600 uppercase tracking-wider block mb-1">
+                                    <i class="fa-solid fa-shield-halved text-teal-600 mr-1"></i>Cláusula RGPD del Módulo
+                                </span>
+                                <div class="text-[10px] text-gray-500 line-clamp-3 bg-white p-2 rounded border border-gray-100">
+                                    {{ email_config.rgpd_footer }}
+                                </div>
+                            </div>
                         </div>
 
                         <div class="flex items-center justify-between pt-2">
@@ -916,42 +951,50 @@ Equipo Posventa Selectra
         });
     }
 
-    function applyEmailTemplate(type) {
+    const configuredEmailTemplates = {{ email_templates_json|default('[]')|safe }};
+
+    function onSelectEmailTemplate(templateId) {
+        if (!templateId) return;
+        const select = document.getElementById('email-template-select');
+        if (select && select.value !== templateId) {
+            select.value = templateId;
+        }
+
+        const tpl = configuredEmailTemplates.find(t => t.id === templateId);
+        if (!tpl) {
+            applyEmailTemplate(templateId);
+            return;
+        }
+
         const bodyInput = document.getElementById('email-body-input');
         const subjectInput = document.getElementById('email-subject-input');
+
         const clientName = "{{ ticket.customer_name or 'cliente' }}";
         const ticketId = "{{ ticket.id }}";
         const company = "{{ ticket.company or 'la compañía' }}";
-        const senderEmail = "{{ email_config.email }}";
+        const contractRef = "{{ ticket.contract_reference or 'N/D' }}";
+        const cupsVal = "{{ ticket.cups or 'N/D' }}";
 
-        if (type === 'docs') {
-            subjectInput.value = "[#" + ticketId + "] Solicitud de documentación adicional - Selectra";
-            bodyInput.value = "Estimado/a " + clientName + ",\n\n" +
-                "Para poder avanzar en la tramitación de tu expediente con " + company + ", necesitamos que nos facilites la siguiente documentación:\n\n" +
-                "- Copia de la última factura recibida\n" +
-                "- Copia del DNI/NIE del titular\n\n" +
-                "Puedes responder directamente a este correo adjuntando los archivos solicitados.\n\n" +
-                "Un cordial saludo,\n" +
-                "Equipo Posventa Selectra\n" +
-                senderEmail;
-        } else if (type === 'tramitando') {
-            subjectInput.value = "[#" + ticketId + "] Actualización de estado de tu solicitud - Selectra";
-            bodyInput.value = "Estimado/a " + clientName + ",\n\n" +
-                "Te informamos de que hemos trasladado formalmente la gestión a " + company + " con número de seguimiento interno.\n\n" +
-                "El plazo de respuesta estimado por la compañía es de 48 a 72 horas hábiles. En cuanto tengamos confirmación, nos pondremos de nuevo en contacto contigo.\n\n" +
-                "Un cordial saludo,\n" +
-                "Equipo Posventa Selectra\n" +
-                senderEmail;
-        } else if (type === 'resuelto') {
-            subjectInput.value = "[#" + ticketId + "] Resolución favorable de tu gestión - Selectra";
-            bodyInput.value = "Estimado/a " + clientName + ",\n\n" +
-                "Nos complace comunicarte que la incidencia referida en el ticket #" + ticketId + " ha sido resuelta satisfactoriamente con " + company + ".\n\n" +
-                "No dudes en responder a este correo si tienes cualquier duda adicional o requieres soporte extra.\n\n" +
-                "Gracias por confiar en Selectra.\n\n" +
-                "Un cordial saludo,\n" +
-                "Equipo Posventa Selectra\n" +
-                senderEmail;
-        }
+        let subject = tpl.subject
+            .replace(/\{\{\s*ticket_id\s*\}\}/g, ticketId)
+            .replace(/\{\{\s*customer_name\s*\}\}/g, clientName)
+            .replace(/\{\{\s*company\s*\}\}/g, company)
+            .replace(/\{\{\s*contract_reference\s*\}\}/g, contractRef)
+            .replace(/\{\{\s*cups\s*\}\}/g, cupsVal);
+
+        let body = tpl.body
+            .replace(/\{\{\s*ticket_id\s*\}\}/g, ticketId)
+            .replace(/\{\{\s*customer_name\s*\}\}/g, clientName)
+            .replace(/\{\{\s*company\s*\}\}/g, company)
+            .replace(/\{\{\s*contract_reference\s*\}\}/g, contractRef)
+            .replace(/\{\{\s*cups\s*\}\}/g, cupsVal);
+
+        if (subjectInput) subjectInput.value = subject;
+        if (bodyInput) bodyInput.value = body;
+    }
+
+    function applyEmailTemplate(type) {
+        onSelectEmailTemplate(type);
     }
 
     function onWhatsAppTemplateChange(templateKey) {
